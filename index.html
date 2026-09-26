@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>公交站牌生成器</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background-color: #f0f9f0;
+            padding: 20px;
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh;
+            transition: background-color 0.3s;
+        }
+        .controls {
+            background: #fff; padding: 20px; border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+            width: 100%; max-width: 1200px; margin-bottom: 20px;
+            border: 2px solid #a8d5a8;
+            transition: border-color 0.3s;
+        }
+        .input-row { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+        .input-group { flex: 1; min-width: 150px; }
+        .input-group label { display: block; font-weight: 600; color: #2d6a2d; margin-bottom: 6px; font-size: 13px; transition: color 0.3s; }
+        .input-group input[type="text"] {
+            width: 100%; padding: 8px 12px; border: 1px solid #c8e6c8; border-radius: 8px;
+            font-family: inherit; font-size: 14px; background: #fafffa;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .input-group input[type="text"]:focus { outline: none; box-shadow: 0 0 0 3px rgba(92,184,92,0.15); }
+
+        .top-bar {
+            display: flex; gap: 12px; align-items: flex-end; margin-bottom: 15px;
+            padding-bottom: 15px; border-bottom: 1px dashed #c8e6c8;
+            transition: border-color 0.3s;
+        }
+        .top-bar .input-group { flex: 1; margin-bottom: 0; }
+        .switch-group { display: flex; align-items: center; gap: 8px; padding-bottom: 10px; }
+        .switch-group label { font-size: 13px; font-weight: 600; color: #2d6a2d; cursor: pointer; transition: color 0.3s; }
+        .switch { position: relative; display: inline-block; width: 40px; height: 22px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc; transition: .4s; border-radius: 22px;
+        }
+        .slider:before {
+            position: absolute; content: ""; height: 16px; width: 16px;
+            left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #5cb85c; }
+        input:checked + .slider:before { transform: translateX(18px); }
+
+        .route-list { display: flex; flex-direction: column; gap: 15px; margin-top: 10px; }
+        .route-card { border: 1px solid #c8e6c8; border-radius: 8px; padding: 15px; background: #f7fff7; position: relative; transition: border-color 0.3s, background 0.3s; }
+        .route-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-weight: bold; color: #2d6a2d; font-size: 14px; transition: color 0.3s; }
+        .btn-remove { background: #e57373; color: #fff; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .btn-remove:hover { background: #d32f2f; }
+
+        .theme-bar {
+            display: flex; align-items: center; gap: 8px; margin-bottom: 15px;
+            padding: 10px 15px; background: #f7fff7; border-radius: 8px;
+            border: 1px solid #c8e6c8; flex-wrap: wrap;
+            transition: background 0.3s, border-color 0.3s;
+        }
+        .theme-label { font-size: 13px; font-weight: 600; color: #2d6a2d; margin-right: 8px; transition: color 0.3s; }
+        .theme-swatch {
+            width: 28px; height: 28px; border-radius: 6px; cursor: pointer;
+            border: 2px solid transparent; transition: all 0.15s;
+        }
+        .theme-swatch:hover { transform: scale(1.15); }
+        .theme-swatch.active { border-color: #333; box-shadow: 0 0 0 2px #fff, 0 0 0 4px #333; }
+
+        .btn-group { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+        .btn-group button { padding: 10px 24px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; transition: all 0.2s; }
+        .btn-generate { background: #5cb85c; color: #fff; flex: 1; }
+        .btn-download { background: #66bb6a; color: #fff; flex: 1; }
+        .btn-reset { background: #e8f5e9; color: #2d6a2d; }
+        .btn-add { background: #81c784; color: #fff; }
+        .btn-generate:hover, .btn-download:hover, .btn-add:hover { opacity: 0.85; }
+
+        .canvas-container {
+            width: 100%; max-width: 1450px;
+            overflow-x: auto;
+            background: #fff; padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+            border: 2px dashed #a8d5a8;
+            transition: border-color 0.3s;
+        }
+        canvas { display: block; background-color: #fff; border-radius: 8px; max-width: none; }
+        .tip { font-size: 12px; color: #6b8e6b; margin-top: 8px; text-align: center; transition: color 0.3s; }
+
+        .modal { display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+        .modal img { max-width: 90%; max-height: 80%; border: 4px solid #fff; border-radius: 8px; object-fit: contain; background: #fff; }
+        .modal p { color: #fff; margin-top: 15px; font-size: 16px; font-weight: bold; text-align: center; }
+        .modal .close-btn { margin-top: 15px; padding: 8px 30px; background: #e57373; color: #fff; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <div class="theme-bar">
+            <span class="theme-label">🎨 全局风格：</span>
+            <div id="themeSwatches" style="display:flex; gap:5px; flex-wrap:wrap;"></div>
+        </div>
+
+        <div class="top-bar">
+            <div class="input-group">
+                <label>顶部站名标题（自动作为“本站”标红）</label>
+                <input type="text" id="topStationName" value="小苑站">
+            </div>
+            <div class="switch-group">
+                <label class="switch">
+                    <input type="checkbox" id="showTopStation" checked>
+                    <span class="slider"></span>
+                </label>
+                <label for="showTopStation">显示站名</label>
+            </div>
+        </div>
+
+        <div class="route-list" id="routeList"></div>
+
+        <div class="btn-group" style="margin-top: 15px;">
+            <button class="btn-add" onclick="addRoute()">➕ 添加线路</button>
+            <button class="btn-generate" onclick="drawAll()">生成站牌</button>
+            <button class="btn-download" onclick="openDownloadModal()">📥 下载/保存图片</button>
+            <button class="btn-reset" onclick="location.reload()">重置</button>
+        </div>
+        <div class="tip" style="text-align: left; margin-top: 10px;">
+            💡 提示：顶部站名会自动在站点列表中高亮标红；站名超过 7 个字自动折成两列竖排。站点后加 " tr" 显示轨道图标。
+        </div>
+    </div>
+
+    <div class="canvas-container">
+        <canvas id="busCanvas"></canvas>
+    </div>
+
+    <div class="modal" id="downloadModal">
+        <img id="modalImg" src="" alt="站牌">
+        <p>💡 请长按上方图片，选择“保存图片”或“下载图片”</p>
+        <button class="close-btn" onclick="document.getElementById('downloadModal').style.display='none'">关 闭</button>
+    </div>
+
+    <script>
+        // ==================== 16 种 UI 主题 ====================
+        const THEMES = [
+            { name: '绿',   main: '#5cb85c', light: '#f0f9f0', border: '#a8d5a8', card: '#f7fff7', cardBorder: '#c8e6c8', text: '#2d6a2d' },
+            { name: '红',   main: '#d9534f', light: '#fdf0f0', border: '#e8a8a8', card: '#fff7f7', cardBorder: '#e6c8c8', text: '#7a2d2d' },
+            { name: '橙',   main: '#fd7e14', light: '#fff6ec', border: '#ffcca8', card: '#fffaf5', cardBorder: '#fce0c8', text: '#8a4a0f' },
+            { name: '黄',   main: '#e6b800', light: '#fffdf0', border: '#f0e0a8', card: '#fffff7', cardBorder: '#e8dfa8', text: '#7a6a0f' },
+            { name: '青',   main: '#17a2b8', light: '#f0f9fb', border: '#a8d8e0', card: '#f7fdfe', cardBorder: '#c8e0e8', text: '#0f4a5a' },
+            { name: '蓝',   main: '#007bff', light: '#f0f7ff', border: '#a8c8f0', card: '#f7faff', cardBorder: '#c8d8f0', text: '#0f3a7a' },
+            { name: '靛',   main: '#4b0082', light: '#f5f0fa', border: '#c8a8e0', card: '#faf7fe', cardBorder: '#d8c8e8', text: '#3a0f6a' },
+            { name: '紫',   main: '#6f42c1', light: '#f7f4fc', border: '#c8b8e8', card: '#fbf9fe', cardBorder: '#d8c8f0', text: '#3a1f6a' },
+            { name: '粉',   main: '#e83e8c', light: '#fdf0f7', border: '#f0a8c8', card: '#fff7fa', cardBorder: '#e8c8d8', text: '#7a1f4a' },
+            { name: '玫红', main: '#dc3545', light: '#fdf0f2', border: '#e8a8b0', card: '#fff7f8', cardBorder: '#e6c8cc', text: '#7a1f2a' },
+            { name: '棕',   main: '#8b4513', light: '#faf5f0', border: '#d8b898', card: '#fefcf9', cardBorder: '#e0d0b8', text: '#5a2d0f' },
+            { name: '灰',   main: '#6c757d', light: '#f5f6f7', border: '#c8ccd0', card: '#fafbfc', cardBorder: '#d8dcdf', text: '#3a4045' },
+            { name: '墨绿', main: '#2e7d32', light: '#f0f7f1', border: '#a8d0a8', card: '#f7fdf8', cardBorder: '#c8dcc8', text: '#1a4a1e' },
+            { name: '薄荷', main: '#20c997', light: '#f0fdf9', border: '#a8e8d8', card: '#f7fffc', cardBorder: '#c8f0e0', text: '#0f5a4a' },
+            { name: '天蓝', main: '#87ceeb', light: '#f0f9fd', border: '#b8dce8', card: '#f7fcfe', cardBorder: '#c8e0f0', text: '#2a5a7a' },
+            { name: '紫红', main: '#c2185b', light: '#fdf0f5', border: '#e8a8c8', card: '#fff7fa', cardBorder: '#f0c8d8', text: '#7a0f3a' }
+        ];
+
+        let currentThemeIndex = 0;
+
+        function getRouteColor(routeNum) {
+            const first = routeNum.charAt(0);
+            const colors = {
+                '1': '#d9534f', '2': '#28a745', '3': '#ffd700',
+                '4': '#87ceeb', '5': '#fd7e14', '6': '#8b4513',
+                '8': '#6f42c1', '9': '#98fb98'
+            };
+            return colors[first] || '#001f5c';
+        }
+
+        function hexToRgba(hex, alpha) {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r},${g},${b},${alpha})`;
+        }
+
+        function applyTheme(index) {
+            currentThemeIndex = index;
+            const t = THEMES[index];
+            
+            document.body.style.backgroundColor = t.light;
+            
+            document.querySelectorAll('.controls').forEach(el => el.style.borderColor = t.border);
+            document.querySelectorAll('.input-group label').forEach(el => el.style.color = t.text);
+            document.querySelectorAll('.input-group input[type="text"]').forEach(el => {
+                el.style.borderColor = t.cardBorder;
+                el.style.background = t.card;
+            });
+            document.querySelectorAll('.route-card').forEach(el => {
+                el.style.borderColor = t.cardBorder;
+                el.style.background = t.card;
+            });
+            document.querySelectorAll('.route-card-header').forEach(el => el.style.color = t.text);
+            document.querySelectorAll('.theme-bar').forEach(el => {
+                el.style.background = t.card;
+                el.style.borderColor = t.cardBorder;
+            });
+            document.querySelectorAll('.theme-label').forEach(el => el.style.color = t.text);
+            document.querySelectorAll('.canvas-container').forEach(el => el.style.borderColor = t.border);
+            document.querySelectorAll('.tip').forEach(el => el.style.color = t.text);
+            document.querySelectorAll('.switch-group label').forEach(el => el.style.color = t.text);
+            document.querySelectorAll('.top-bar').forEach(el => el.style.borderBottomColor = t.cardBorder);
+            
+            document.querySelectorAll('.btn-generate').forEach(el => el.style.background = t.main);
+            document.querySelectorAll('.btn-download').forEach(el => el.style.background = t.main);
+            document.querySelectorAll('.btn-add').forEach(el => el.style.background = t.main);
+            document.querySelectorAll('.btn-reset').forEach(el => {
+                el.style.background = t.card;
+                el.style.color = t.text;
+            });
+            
+            document.querySelectorAll('.slider').forEach(el => {
+                if (el.previousElementSibling && el.previousElementSibling.checked) {
+                    el.style.backgroundColor = t.main;
+                } else {
+                    el.style.backgroundColor = '#ccc';
+                }
+            });
+            const showToggle = document.getElementById('showTopStation');
+            const slider = showToggle.nextElementSibling;
+            if (showToggle.checked) {
+                slider.style.backgroundColor = t.main;
+            } else {
+                slider.style.backgroundColor = '#ccc';
+            }
+            
+            document.querySelectorAll('.theme-swatch').forEach((el, i) => {
+                el.classList.toggle('active', i === index);
+            });
+
+            drawAll();
+        }
+
+        function initThemeSwatches() {
+            const container = document.getElementById('themeSwatches');
+            THEMES.forEach((t, i) => {
+                const swatch = document.createElement('div');
+                swatch.className = 'theme-swatch' + (i === 0 ? ' active' : '');
+                swatch.style.background = t.main;
+                swatch.title = t.name;
+                swatch.onclick = () => applyTheme(i);
+                container.appendChild(swatch);
+            });
+        }
+
+        const CONFIG = {
+            padding: 15,
+            titleHeight: 50,
+            legendHeight: 40,   // 🔥 图例高度
+            minCanvasWidth: 920,
+            maxRouteStationWidth: 1200,
+            maxRoutes: 10,
+            leftBoxWidth: 160,
+            stationGap: 20,
+            stationFontSize: 18,
+            routeHeight: 260,
+            stationYOffset: 0,
+            maxCharsPerLine: 7
+        };
+
+        let routeCount = 0;
+
+        function addRoute() {
+            if (routeCount >= CONFIG.maxRoutes) {
+                alert(`最多只能添加 ${CONFIG.maxRoutes} 条线路`);
+                return;
+            }
+            
+            const routeList = document.getElementById('routeList');
+            const card = document.createElement('div');
+            card.className = 'route-card';
+            
+            card.innerHTML = `
+                <div class="route-card-header">
+                    <span>线路 ${routeCount + 1}</span>
+                    <button class="btn-remove" onclick="removeRoute(this)">删除线路</button>
+                </div>
+                <div class="input-row">
+                    <div class="input-group">
+                        <label>线路号</label>
+                        <input type="text" class="route-num" value="">
+                    </div>
+                    <div class="input-group">
+                        <label>起点站名</label>
+                        <input type="text" class="start-station" value="">
+                    </div>
+                    <div class="input-group">
+                        <label>终点站名</label>
+                        <input type="text" class="end-station" value="">
+                    </div>
+                    <div class="input-group">
+                        <label>首末班时间</label>
+                        <input type="text" class="time-range" value="06:00-22:00">
+                    </div>
+                </div>
+                <div class="input-row">
+                    <div class="input-group" style="flex: 1;">
+                        <label>途径站点（逗号分隔，站名后加" tr"可强制显示轨道图标）</label>
+                        <input type="text" class="stations-list" value="">
+                    </div>
+                </div>
+            `;
+            
+            routeList.appendChild(card);
+            routeCount++;
+            applyThemeToCard(card);
+        }
+
+        function applyThemeToCard(card) {
+            const t = THEMES[currentThemeIndex];
+            card.style.borderColor = t.cardBorder;
+            card.style.background = t.card;
+            card.querySelector('.route-card-header').style.color = t.text;
+            card.querySelectorAll('label').forEach(el => el.style.color = t.text);
+            card.querySelectorAll('input[type="text"]').forEach(el => {
+                el.style.borderColor = t.cardBorder;
+                el.style.background = t.card;
+            });
+        }
+
+        function removeRoute(btn) {
+            btn.closest('.route-card').remove();
+            routeCount--;
+            drawAll();
+        }
+
+        // ==================== 🔥 图例绘制（独立函数） ====================
+        function drawLegend(ctx, startY, baseWidth, t) {
+            const legendY = startY + CONFIG.legendHeight / 2;
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 14px "PingFang SC", "Microsoft YaHei"';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+
+            // 图例标题（主题色块）
+            ctx.fillStyle = t.main;
+            roundRect(ctx, CONFIG.padding, legendY - 12, 60, 24, 4, true, false);
+            ctx.fillStyle = '#fff';
+            ctx.fillText('图例:', CONFIG.padding + 10, legendY + 1);
+
+            // 行驶方向
+            ctx.fillStyle = '#d9534f';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.fillText('←', CONFIG.padding + 80, legendY);
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 13px "PingFang SC"';
+            ctx.fillText('行驶方向', CONFIG.padding + 100, legendY);
+
+            // 终点站
+            ctx.fillStyle = '#d9534f';
+            ctx.fillRect(CONFIG.padding + 180, legendY - 8, 3, 16);
+            ctx.fillStyle = '#333';
+            ctx.fillText('终点站', CONFIG.padding + 190, legendY);
+
+            // 轨道换乘站
+            drawTransferIcon(ctx, CONFIG.padding + 260, legendY - 1, 9);
+            ctx.fillStyle = '#333';
+            ctx.fillText('轨道换乘站', CONFIG.padding + 280, legendY);
+        }
+
+        // ==================== 绘制 ====================
+        function drawAll() {
+            const canvas = document.getElementById('busCanvas');
+            const ctx = canvas.getContext('2d');
+
+            const topStationName = document.getElementById('topStationName').value.trim();
+            const showTopStation = document.getElementById('showTopStation').checked;
+            const t = THEMES[currentThemeIndex];
+            
+            const cards = document.querySelectorAll('.route-card');
+            let routes = [];
+            
+            cards.forEach(card => {
+                const stationsStr = card.querySelector('.stations-list').value.trim();
+                if (!stationsStr) return;
+                
+                const rawStations = stationsStr.split(',').map(s => s.trim()).filter(s => s);
+                const parsedStations = rawStations.map(s => {
+                    const hasTR = s.endsWith(' tr') || s.endsWith(' TR') || s.endsWith(' Tr');
+                    const cleanName = hasTR ? s.slice(0, -3).trim() : s;
+                    return { name: cleanName, isTransfer: hasTR };
+                });
+                
+                routes.push({
+                    routeNum: card.querySelector('.route-num').value.trim() || '000',
+                    startStation: card.querySelector('.start-station').value.trim() || '起点',
+                    endStation: card.querySelector('.end-station').value.trim() || '终点',
+                    timeRange: card.querySelector('.time-range').value.trim() || '06:00-22:00',
+                    stations: parsedStations
+                });
+            });
+
+            const dpr = window.devicePixelRatio || 1;
+            
+            let maxStationsCount = 0;
+            routes.forEach(r => { if (r.stations.length > maxStationsCount) maxStationsCount = r.stations.length; });
+            const longestRouteWidth = maxStationsCount * (CONFIG.stationFontSize + CONFIG.stationGap);
+            const targetStationWidth = Math.min(longestRouteWidth, CONFIG.maxRouteStationWidth);
+            
+            let calcWidth = CONFIG.padding * 2 + CONFIG.leftBoxWidth + targetStationWidth + 60;
+            const baseWidth = Math.max(calcWidth, CONFIG.minCanvasWidth);
+            const actualStationWidth = baseWidth - CONFIG.padding * 2 - CONFIG.leftBoxWidth - 60;
+            
+            const titleAreaHeight = (showTopStation && topStationName) ? CONFIG.titleHeight : 0;
+            
+            // 空状态高度 = 4 条线路那么高
+            const isEmpty = (routes.length === 0);
+            const emptyMinHeight = CONFIG.routeHeight * 4;
+            const contentHeight = isEmpty ? emptyMinHeight : routes.length * CONFIG.routeHeight;
+            
+            // 🔥 高度计算加入图例高度
+            const baseHeight = CONFIG.padding * 2 + titleAreaHeight + CONFIG.legendHeight + contentHeight + 40;
+
+            canvas.width = baseWidth * dpr;
+            canvas.height = baseHeight * dpr;
+            canvas.style.width = baseWidth + 'px';
+            canvas.style.height = baseHeight + 'px';
+            ctx.scale(dpr, dpr);
+
+            // 背景
+            ctx.fillStyle = t.light;
+            ctx.fillRect(0, 0, baseWidth, baseHeight);
+            ctx.fillStyle = '#ffffff';
+            roundRect(ctx, 5, 5, baseWidth - 10, baseHeight - 10, 12, true, false);
+            ctx.strokeStyle = t.main;
+            ctx.lineWidth = 3;
+            roundRect(ctx, 5, 5, baseWidth - 10, baseHeight - 10, 12, false, true);
+
+            let currentY = 15;
+            if (showTopStation && topStationName) {
+                ctx.fillStyle = t.main;
+                roundRect(ctx, 15, currentY, baseWidth - 30, CONFIG.titleHeight, 8, true, false);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 24px "PingFang SC", "Microsoft YaHei"';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(topStationName, baseWidth / 2, currentY + CONFIG.titleHeight / 2);
+                currentY += CONFIG.titleHeight + 15;
+            }
+
+            // 🔥 图例（不管有没有线路，图例都要画）
+            drawLegend(ctx, currentY, baseWidth, t);
+            currentY += CONFIG.legendHeight + 10;
+
+            // 🔥 空状态：规划中文字，水平垂直居中
+            if (isEmpty) {
+                const text1 = '更多线路正在规划中...';
+                const text2 = '敬请期待...';
+                
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                const centerY = currentY + emptyMinHeight / 2;
+                
+                const fontSize1 = 32;
+                ctx.font = `bold ${fontSize1}px "PingFang SC", "Microsoft YaHei"`;
+                const text1Width = ctx.measureText(text1).width;
+                const grad1 = ctx.createLinearGradient(
+                    baseWidth / 2 - text1Width / 2, 0, 
+                    baseWidth / 2 + text1Width / 2, 0
+                );
+                grad1.addColorStop(0, t.main);
+                grad1.addColorStop(0.5, hexToRgba(t.main, 0.6));
+                grad1.addColorStop(1, hexToRgba(t.main, 0.1));
+                ctx.fillStyle = grad1;
+                ctx.fillText(text1, baseWidth / 2, centerY - 30);
+                
+                const fontSize2 = 22;
+                ctx.font = `bold ${fontSize2}px "PingFang SC", "Microsoft YaHei"`;
+                const text2Width = ctx.measureText(text2).width;
+                const grad2 = ctx.createLinearGradient(
+                    baseWidth / 2 - text2Width / 2, 0, 
+                    baseWidth / 2 + text2Width / 2, 0
+                );
+                grad2.addColorStop(0, t.main);
+                grad2.addColorStop(0.5, hexToRgba(t.main, 0.6));
+                grad2.addColorStop(1, hexToRgba(t.main, 0.1));
+                ctx.fillStyle = grad2;
+                ctx.fillText(text2, baseWidth / 2, centerY + 30);
+                
+                return;
+            }
+
+            // 有线路时正常画
+            routes.forEach((route) => {
+                drawSingleRoute(ctx, route, currentY, baseWidth, actualStationWidth, t, topStationName);
+                currentY += CONFIG.routeHeight;
+            });
+        }
+
+        function drawSingleRoute(ctx, route, startY, baseWidth, targetStationWidth, t, topStationName) {
+            const { routeNum, startStation, endStation, timeRange, stations } = route;
+            const currentStation = topStationName || '';
+            
+            const leftBoxX = CONFIG.padding;
+            const leftBoxHeight = 200;
+            const leftBoxY = startY + (CONFIG.routeHeight - leftBoxHeight) / 2;
+
+            ctx.strokeStyle = t.main;
+            ctx.lineWidth = 2;
+            roundRect(ctx, leftBoxX - 5, startY + 10, baseWidth - CONFIG.padding * 2 + 10, CONFIG.routeHeight - 20, 8, false, true);
+
+            ctx.strokeStyle = '#d4af37';
+            ctx.lineWidth = 1.5;
+            roundRect(ctx, leftBoxX + 10, leftBoxY, CONFIG.leftBoxWidth, leftBoxHeight, 8, false, true);
+
+            const routeColor = getRouteColor(routeNum);
+            ctx.fillStyle = routeColor;
+            ctx.font = '900 48px "Arial Black", "Impact", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText(routeNum, leftBoxX + 10 + CONFIG.leftBoxWidth / 2, leftBoxY + 20);
+
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 13px "PingFang SC"';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(startStation, leftBoxX + 10 + CONFIG.leftBoxWidth / 2, leftBoxY + 85);
+            
+            ctx.fillStyle = '#d4af37';
+            ctx.font = '12px sans-serif';
+            ctx.fillText('▼', leftBoxX + 10 + CONFIG.leftBoxWidth / 2, leftBoxY + 110);
+            
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 13px "PingFang SC"';
+            ctx.fillText(endStation, leftBoxX + 10 + CONFIG.leftBoxWidth / 2, leftBoxY + 135);
+
+            ctx.strokeStyle = '#eee';
+            ctx.beginPath();
+            ctx.moveTo(leftBoxX + 20, leftBoxY + 160);
+            ctx.lineTo(leftBoxX + CONFIG.leftBoxWidth, leftBoxY + 160);
+            ctx.stroke();
+            
+            ctx.fillStyle = '#666';
+            ctx.font = '10px "PingFang SC"';
+            ctx.fillText('首末班时间', leftBoxX + 10 + CONFIG.leftBoxWidth / 2, leftBoxY + 175);
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 12px "PingFang SC"';
+            ctx.fillText(timeRange, leftBoxX + 10 + CONFIG.leftBoxWidth / 2, leftBoxY + 192);
+
+            const stationsStartX = leftBoxX + CONFIG.leftBoxWidth + 30;
+            const lineY = leftBoxY + leftBoxHeight - 5;
+            const lineEndX = stationsStartX + targetStationWidth;
+
+            ctx.beginPath();
+            ctx.moveTo(stationsStartX, lineY);
+            ctx.lineTo(lineEndX, lineY);
+            ctx.strokeStyle = '#f0ad4e';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            ctx.fillStyle = '#f0ad4e';
+            ctx.beginPath();
+            ctx.moveTo(lineEndX, lineY - 6);
+            ctx.lineTo(lineEndX, lineY + 6);
+            ctx.lineTo(lineEndX + 15, lineY);
+            ctx.closePath();
+            ctx.fill();
+
+            const neededWidth = stations.length * (CONFIG.stationFontSize + CONFIG.stationGap);
+            let scaleX = 1.0;
+            if (neededWidth > targetStationWidth) {
+                scaleX = targetStationWidth / neededWidth;
+                if (scaleX < 0.35) scaleX = 0.35;
+            }
+            
+            let actualGap = CONFIG.stationGap;
+            if (stations.length > 1) {
+                const compressedStationWidth = stations.length * CONFIG.stationFontSize * scaleX;
+                const remainingWidth = targetStationWidth - compressedStationWidth;
+                actualGap = remainingWidth / (stations.length - 1);
+                if (actualGap < 4) actualGap = 4;
+            }
+
+            stations.forEach((station, index) => {
+                const stationX = stationsStartX + index * (CONFIG.stationFontSize * scaleX + actualGap);
+                const isEnd = (index === stations.length - 1);
+                const isTransfer = station.isTransfer;
+                const isCurrent = (currentStation !== '' && station.name === currentStation);
+
+                ctx.font = `bold ${CONFIG.stationFontSize}px "PingFang SC", "Microsoft YaHei"`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+
+                let textColor = '#000';
+                if (isCurrent) textColor = '#d9534f';
+                else if (isEnd && !isCurrent) textColor = '#d9534f';
+
+                ctx.fillStyle = textColor;
+                const charArr = station.name.split('');
+                const charSpacing = CONFIG.stationFontSize + 4;
+                
+                if (charArr.length > CONFIG.maxCharsPerLine) {
+                    const mid = Math.ceil(charArr.length / 2);
+                    const col1 = charArr.slice(0, mid);
+                    const col2 = charArr.slice(mid);
+                    
+                    const maxColLength = Math.max(col1.length, col2.length);
+                    const totalTextHeight = maxColLength * charSpacing;
+                    
+                    ctx.save();
+                    ctx.translate(stationX, 0);
+                    ctx.scale(scaleX, 1.0);
+                    ctx.translate(-stationX, 0);
+
+                    let startY1 = lineY - totalTextHeight + 5 + CONFIG.stationYOffset;
+                    col1.forEach((char, i) => {
+                        ctx.fillText(char, stationX - charSpacing / 2, startY1 + i * charSpacing);
+                    });
+                    
+                    let startY2 = lineY - col2.length * charSpacing + 5 + CONFIG.stationYOffset;
+                    col2.forEach((char, i) => {
+                        ctx.fillText(char, stationX + charSpacing / 2, startY2 + i * charSpacing);
+                    });
+
+                    const boxLeft = stationX - charSpacing - 2;
+                    const boxRight = stationX + charSpacing + 2;
+                    const boxTop = lineY - totalTextHeight + CONFIG.stationYOffset - 5;
+                    const boxBottom = boxTop + 12; 
+
+                    ctx.beginPath();
+                    ctx.moveTo(boxLeft, boxBottom);
+                    ctx.lineTo(boxLeft, boxTop);
+                    ctx.lineTo(boxRight, boxTop);
+                    ctx.lineTo(boxRight, boxBottom);
+                    ctx.strokeStyle = '#333';
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+
+                    if (isTransfer) {
+                        const iconY = startY1 - 22;
+                        drawTransferIcon(ctx, stationX - charSpacing / 2 - 9, iconY, 9);
+                    }
+                    
+                    ctx.restore();
+                } else {
+                    let textHeight = charArr.length * charSpacing;
+                    let startTextY = lineY - textHeight + 5 + CONFIG.stationYOffset;
+
+                    ctx.save();
+                    ctx.translate(stationX, 0);
+                    ctx.scale(scaleX, 1.0);
+                    ctx.translate(-stationX, 0);
+
+                    charArr.forEach((char, i) => {
+                        ctx.fillText(char, stationX, startTextY + i * charSpacing);
+                    });
+
+                    if (isTransfer) {
+                        const iconY = startTextY - 20 + CONFIG.stationYOffset;
+                        drawTransferIcon(ctx, stationX - 9, iconY, 9);
+                    }
+                    ctx.restore();
+                }
+
+                if (isCurrent || (isEnd && !isCurrent)) {
+                    ctx.fillStyle = '#d9534f';
+                    ctx.beginPath();
+                    ctx.moveTo(stationX, lineY - 2);
+                    ctx.lineTo(stationX - 6, lineY - 12);
+                    ctx.lineTo(stationX + 6, lineY - 12);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            });
+        }
+
+        function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+            if (fill) ctx.fill();
+            if (stroke) ctx.stroke();
+        }
+
+        function drawTransferIcon(ctx, x, y, radius) {
+            ctx.beginPath();
+            ctx.arc(x + radius, y + radius, radius, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+            ctx.strokeStyle = '#28a745';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.fillStyle = '#28a745';
+            ctx.font = `bold ${radius - 2}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('轨', x + radius, y + radius);
+        }
+
+        function openDownloadModal() {
+            const canvas = document.getElementById('busCanvas');
+            if (!canvas || canvas.width === 0) {
+                alert("请先点击“生成站牌”按钮！");
+                return;
+            }
+            const dataURL = canvas.toDataURL('image/png');
+            document.getElementById('modalImg').src = dataURL;
+            document.getElementById('downloadModal').style.display = 'flex';
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const showToggle = document.getElementById('showTopStation');
+            showToggle.addEventListener('change', function() {
+                const t = THEMES[currentThemeIndex];
+                const slider = this.nextElementSibling;
+                slider.style.backgroundColor = this.checked ? t.main : '#ccc';
+                drawAll();
+            });
+        });
+
+        window.onload = function() {
+            initThemeSwatches();
+            applyTheme(0);
+            setTimeout(drawAll, 100);
+        };
+    </script>
+</body>
+</html>
